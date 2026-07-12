@@ -11,6 +11,7 @@ add_executable(threat_engine
     src/main.cpp
     src/protocol/ProtocolParser.cpp
     src/flow/FlowTable.cpp
+    src/detection/ThreatDetector.cpp
 )
 target_include_directories(threat_engine PRIVATE src)
 target_link_libraries(threat_engine PRIVATE ${PCAP_LIB})

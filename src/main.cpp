@@ -2,31 +2,38 @@
 #include <pcap.h>
 #include "protocol/ProtocolParser.hpp"
 #include "flow/FlowTable.hpp"
+#include "detection/ThreatDetector.hpp"
 
-// global flow table — persists across all packet callbacks
-FlowTable flowTable;
+FlowTable     flowTable;
+ThreatDetector detector;
 
-void onPacket(uint8_t* user, const struct pcap_pkthdr* header, const uint8_t* data) {
+void onPacket(uint8_t* user,
+              const struct pcap_pkthdr* header,
+              const uint8_t* data) {
 
     ParsedPacket pkt = parsePacket(data, header->len);
     if (!pkt.valid) return;
 
-    // build the flow key from this packet
+    // update flow table
     FlowKey key;
     key.srcIP    = pkt.srcIP;
     key.dstIP    = pkt.dstIP;
     key.srcPort  = pkt.srcPort;
     key.dstPort  = pkt.dstPort;
     key.protocol = pkt.protocol;
+    flowTable.update(key, header->len,
+                     pkt.isSYN, pkt.isACK, pkt.isFIN);
 
-    // update the flow table
-    flowTable.update(key, header->len, pkt.isSYN, pkt.isACK, pkt.isFIN);
+    // run threat detection on every packet
+    detector.analyze(pkt.srcIP, pkt.dstIP,
+                     pkt.dstPort,
+                     pkt.isSYN, pkt.isACK);
 
-    // still print each packet
+    // print packet
     std::string proto = (pkt.protocol == 6) ? "TCP" : "UDP";
     std::cout << "[" << proto << "] "
               << pkt.srcIP << ":" << pkt.srcPort
-              << " → "
+              << " -> "
               << pkt.dstIP << ":" << pkt.dstPort
               << " | " << header->len << " bytes\n";
 }
@@ -46,11 +53,10 @@ int main(int argc, char* argv[]) {
 
     std::cout << "=== Network Threat Engine ===\n\n";
     pcap_loop(handle, -1, onPacket, nullptr);
-
-    // print flow summary at the end
     flowTable.printSummary();
-
     std::cout << "\n=== Done ===\n";
+
     pcap_close(handle);
     return 0;
 }
+
