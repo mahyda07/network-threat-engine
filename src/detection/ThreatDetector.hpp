@@ -4,6 +4,8 @@
 #include <unordered_set>
 #include <cstdint>
 #include <ctime>
+#include "storage/AlertLogger.hpp"
+
 
 // Everything we track per IP address
 struct IPProfile {
@@ -22,7 +24,9 @@ struct IPProfile {
 
 class ThreatDetector {
 public:
-    // call this for every packet
+    // pass in the logger so we can save alerts
+    explicit ThreatDetector(AlertLogger& logger);
+
     void analyze(const std::string& srcIP,
                  const std::string& dstIP,
                  uint16_t dstPort,
@@ -30,17 +34,12 @@ public:
                  bool isACK);
 
 private:
-    // one profile per source IP
+    AlertLogger& logger_;  // reference to our logger
     std::unordered_map<std::string, IPProfile> profiles_;
-
-    // internal detection functions
-    void checkPortScan(const std::string& ip, const IPProfile& profile);
-    void checkSYNFlood(const std::string& ip, const IPProfile& profile);
-
-    // so we don't spam the same alert 100 times
     std::unordered_set<std::string> firedAlerts_;
 
-    // print a formatted alert
+    void checkPortScan(const std::string& ip, const IPProfile& profile);
+    void checkSYNFlood(const std::string& ip, const IPProfile& profile);
     void fireAlert(const std::string& type,
                    const std::string& ip,
                    const std::string& detail);

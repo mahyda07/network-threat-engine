@@ -3,9 +3,11 @@
 #include "protocol/ProtocolParser.hpp"
 #include "flow/FlowTable.hpp"
 #include "detection/ThreatDetector.hpp"
+#include "storage/AlertLogger.hpp"
 
-FlowTable     flowTable;
-ThreatDetector detector;
+FlowTable   flowTable;
+AlertLogger logger("alerts.db");
+ThreatDetector detector(logger);
 
 void onPacket(uint8_t* user,
               const struct pcap_pkthdr* header,
@@ -14,7 +16,6 @@ void onPacket(uint8_t* user,
     ParsedPacket pkt = parsePacket(data, header->len);
     if (!pkt.valid) return;
 
-    // update flow table
     FlowKey key;
     key.srcIP    = pkt.srcIP;
     key.dstIP    = pkt.dstIP;
@@ -24,12 +25,10 @@ void onPacket(uint8_t* user,
     flowTable.update(key, header->len,
                      pkt.isSYN, pkt.isACK, pkt.isFIN);
 
-    // run threat detection on every packet
     detector.analyze(pkt.srcIP, pkt.dstIP,
                      pkt.dstPort,
                      pkt.isSYN, pkt.isACK);
 
-    // print packet
     std::string proto = (pkt.protocol == 6) ? "TCP" : "UDP";
     std::cout << "[" << proto << "] "
               << pkt.srcIP << ":" << pkt.srcPort
@@ -54,8 +53,11 @@ int main(int argc, char* argv[]) {
     std::cout << "=== Network Threat Engine ===\n\n";
     pcap_loop(handle, -1, onPacket, nullptr);
     flowTable.printSummary();
-    std::cout << "\n=== Done ===\n";
 
+    // print everything saved in database
+    logger.printAllAlerts();
+
+    std::cout << "\n=== Done ===\n";
     pcap_close(handle);
     return 0;
 }

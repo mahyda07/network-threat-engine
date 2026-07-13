@@ -5,13 +5,18 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_library(PCAP_LIB pcap REQUIRED)
-
+find_library(SQLITE_LIB sqlite3 REQUIRED)
 
 add_executable(threat_engine
     src/main.cpp
     src/protocol/ProtocolParser.cpp
     src/flow/FlowTable.cpp
     src/detection/ThreatDetector.cpp
+    src/storage/AlertLogger.cpp
 )
+
 target_include_directories(threat_engine PRIVATE src)
-target_link_libraries(threat_engine PRIVATE ${PCAP_LIB})
+target_link_libraries(threat_engine PRIVATE 
+    ${PCAP_LIB}
+    ${SQLITE_LIB}
+)
