@@ -1,3 +1,4 @@
+#include "storage/JsonExporter.hpp"
 #include <iostream>
 #include <pcap.h>
 #include <thread>
@@ -90,6 +91,11 @@ int main(int argc, char* argv[]) {
     logger.printAllAlerts();
 
     std::cout << "\n=== Done ===\n";
-    pcap_close(handle);
+     pcap_close(handle);
+
+// export alerts to JSON
+  JsonExporter exporter("alerts.db", "alerts.json");
+  exporter.exportAlerts();
+
     return 0;
 }

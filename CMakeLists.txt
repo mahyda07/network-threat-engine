@@ -14,6 +14,7 @@ add_executable(threat_engine
     src/flow/FlowTable.cpp
     src/detection/ThreatDetector.cpp
     src/storage/AlertLogger.cpp
+   src/storage/JsonExporter.cpp
     src/ui/Dashboard.cpp
 )
 
