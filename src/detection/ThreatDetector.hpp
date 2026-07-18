@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -25,6 +26,7 @@ struct IPProfile {
 class ThreatDetector {
 public:
     // pass in the logger so we can save alerts
+
     explicit ThreatDetector(AlertLogger& logger);
 
     void analyze(const std::string& srcIP,
@@ -32,6 +34,14 @@ public:
                  uint16_t dstPort,
                  bool isSYN,
                  bool isACK);
+
+
+
+// optional callback — called when alert fires
+// so dashboard can update in real time
+using AlertCallback = std::function<void(const std::string&, const std::string&)>;
+void setAlertCallback(AlertCallback cb);
+
 
 private:
     AlertLogger& logger_;  // reference to our logger
@@ -43,4 +53,13 @@ private:
     void fireAlert(const std::string& type,
                    const std::string& ip,
                    const std::string& detail);
+
+
+
+
+
+
+AlertCallback alertCallback_ = nullptr;
+
+
 };

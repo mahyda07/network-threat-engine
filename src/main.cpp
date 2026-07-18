@@ -1,13 +1,22 @@
 #include <iostream>
 #include <pcap.h>
+#include <thread>
+#include <atomic>
+#include <chrono>
 #include "protocol/ProtocolParser.hpp"
 #include "flow/FlowTable.hpp"
 #include "detection/ThreatDetector.hpp"
 #include "storage/AlertLogger.hpp"
+#include "ui/Dashboard.hpp"
 
-FlowTable   flowTable;
-AlertLogger logger("alerts.db");
+// global state
+FlowTable      flowTable;
+AlertLogger    logger("alerts.db");
 ThreatDetector detector(logger);
+Dashboard*     dashboard = nullptr;
+
+// packet counter
+std::atomic<uint64_t> packetCount{0};
 
 void onPacket(uint8_t* user,
               const struct pcap_pkthdr* header,
@@ -29,12 +38,14 @@ void onPacket(uint8_t* user,
                      pkt.dstPort,
                      pkt.isSYN, pkt.isACK);
 
-    std::string proto = (pkt.protocol == 6) ? "TCP" : "UDP";
-    std::cout << "[" << proto << "] "
-              << pkt.srcIP << ":" << pkt.srcPort
-              << " -> "
-              << pkt.dstIP << ":" << pkt.dstPort
-              << " | " << header->len << " bytes\n";
+    packetCount++;
+
+    // update dashboard every packet
+    if (dashboard) {
+        dashboard->setPacketCount(packetCount);
+        dashboard->setFlowCount(flowTable.size());
+        dashboard->render();
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -43,22 +54,42 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // create dashboard
+    dashboard = new Dashboard();
+
+    // when alert fires → tell dashboard
+    detector.setAlertCallback(
+        [](const std::string& type, const std::string& ip) {
+            if (dashboard)
+                dashboard->addAlert(type, ip);
+        }
+    );
+
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t* handle = pcap_open_offline(argv[1], errbuf);
     if (!handle) {
+        delete dashboard;
         std::cerr << "Error: " << errbuf << "\n";
         return 1;
     }
 
-    std::cout << "=== Network Threat Engine ===\n\n";
     pcap_loop(handle, -1, onPacket, nullptr);
-    flowTable.printSummary();
 
-    // print everything saved in database
+    // final render
+    if (dashboard) dashboard->render();
+
+    // wait 3 seconds so user can see final state
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // cleanup
+    delete dashboard;
+    dashboard = nullptr;
+
+    // back to normal terminal — print summary
+    flowTable.printSummary();
     logger.printAllAlerts();
 
     std::cout << "\n=== Done ===\n";
     pcap_close(handle);
     return 0;
 }
-

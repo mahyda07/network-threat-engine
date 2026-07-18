@@ -7,6 +7,11 @@
 ThreatDetector::ThreatDetector(AlertLogger& logger) 
     : logger_(logger) {}
 
+
+void ThreatDetector::setAlertCallback(AlertCallback cb) {
+    alertCallback_ = cb;
+}
+
 void ThreatDetector::analyze(const std::string& srcIP,
                               const std::string& dstIP,
                               uint16_t dstPort,
@@ -68,6 +73,17 @@ void ThreatDetector::fireAlert(const std::string& type,
               << std::put_time(tm, "%H:%M:%S") << "\n\n";
 
     // AND save to database
+
     logger_.logAlert(type, ip, detail);
+
+
+
+
+
+// notify dashboard if callback is set
+if (alertCallback_)
+    alertCallback_(type, ip);
+
+
 }
 
