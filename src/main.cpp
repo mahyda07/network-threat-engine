@@ -1,4 +1,3 @@
-#include "storage/JsonExporter.hpp"
 #include <iostream>
 #include <pcap.h>
 #include <thread>
@@ -8,16 +7,16 @@
 #include "flow/FlowTable.hpp"
 #include "detection/ThreatDetector.hpp"
 #include "storage/AlertLogger.hpp"
+#include "storage/JsonExporter.hpp"
 #include "ui/Dashboard.hpp"
 
-// global state
 FlowTable      flowTable;
 AlertLogger    logger("alerts.db");
 ThreatDetector detector(logger);
 Dashboard*     dashboard = nullptr;
 
-// packet counter
 std::atomic<uint64_t> packetCount{0};
+uint64_t totalPackets = 0;
 
 void onPacket(uint8_t* user,
               const struct pcap_pkthdr* header,
@@ -41,10 +40,22 @@ void onPacket(uint8_t* user,
 
     packetCount++;
 
-    // update dashboard every packet
     if (dashboard) {
+        // update stats
         dashboard->setPacketCount(packetCount);
         dashboard->setFlowCount(flowTable.size());
+
+        // add this packet to recent list
+        std::string proto = (pkt.protocol == 6) ? "TCP" : "UDP";
+        std::string src   = pkt.srcIP + ":" +
+                            std::to_string(pkt.srcPort);
+        std::string dst   = pkt.dstIP + ":" +
+                            std::to_string(pkt.dstPort);
+        dashboard->addPacket(proto, src, dst);
+
+        // add flow info
+        dashboard->addFlow(src, dst, packetCount, "ACTIVE");
+
         dashboard->render();
     }
 }
@@ -55,10 +66,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    
+
+totalPackets = 100; // fixed estimate for progress bar
+char errbuf[PCAP_ERRBUF_SIZE];
+
+
     // create dashboard
     dashboard = new Dashboard();
+    dashboard->setTotalExpected(totalPackets);
 
-    // when alert fires → tell dashboard
+    // alert callback → tell dashboard
     detector.setAlertCallback(
         [](const std::string& type, const std::string& ip) {
             if (dashboard)
@@ -66,7 +84,7 @@ int main(int argc, char* argv[]) {
         }
     );
 
-    char errbuf[PCAP_ERRBUF_SIZE];
+    // open pcap file
     pcap_t* handle = pcap_open_offline(argv[1], errbuf);
     if (!handle) {
         delete dashboard;
@@ -75,27 +93,27 @@ int main(int argc, char* argv[]) {
     }
 
     pcap_loop(handle, -1, onPacket, nullptr);
+    pcap_close(handle);
 
-    // final render
-    if (dashboard) dashboard->render();
+    // final render then wait for keypress
+    if (dashboard) {
+        dashboard->render();
+        dashboard->waitForKeypress();
+    }
 
-    // wait 3 seconds so user can see final state
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-
-    // cleanup
+    // cleanup dashboard — restore terminal
     delete dashboard;
     dashboard = nullptr;
 
-    // back to normal terminal — print summary
+    // print summary to terminal
     flowTable.printSummary();
     logger.printAllAlerts();
 
+    // export JSON
+    JsonExporter exporter("alerts.db", "alerts.json");
+    exporter.exportAlerts();
+
     std::cout << "\n=== Done ===\n";
-     pcap_close(handle);
-
-// export alerts to JSON
-  JsonExporter exporter("alerts.db", "alerts.json");
-  exporter.exportAlerts();
-
     return 0;
 }
+

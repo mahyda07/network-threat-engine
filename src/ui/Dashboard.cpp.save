@@ -1,0 +1,121 @@
+#include "ui/Dashboard.hpp"
+#include <ctime>
+#include <iomanip>
+#include <sstream>
+
+Dashboard::Dashboard() {
+    // initialize ncurses
+    initscr();           // start ncurses mode
+    cbreak();            // disable line buffering
+    noecho();            // don't echo keypresses
+    curs_set(0);         // hide the cursor
+    start_color();       // enable colors
+
+    // define color pairs
+    // pair 1 = green text (normal info)
+    // pair 2 = red text (alerts)
+    // pair 3 = cyan text (headers)
+    init_pair(1, COLOR_GREEN,  COLOR_BLACK);
+    init_pair(2, COLOR_RED,    COLOR_BLACK);
+    init_pair(3, COLOR_CYAN,   COLOR_BLACK);
+}
+
+Dashboard::~Dashboard() {
+    endwin();  // restore terminal to normal
+}
+
+void Dashboard::setPacketCount(uint64_t count) {
+    packetCount_ = count;
+}
+
+void Dashboard::setFlowCount(uint64_t count) {
+    flowCount_ = count;
+}
+
+void Dashboard::addAlert(const std::string& type,
+                          const std::string& ip) {
+    // get current time as string
+    std::time_t now = std::time(nullptr);
+    char timebuf[16];
+    std::strftime(timebuf, sizeof(timebuf),
+                  "%H:%M:%S", std::localtime(&now));
+
+    AlertEntry entry;
+    entry.time = timebuf;
+    entry.type = type;
+    entry.ip   = ip;
+
+    alerts_.push_back(entry);
+
+    // keep only last 5 alerts on screen
+    if (alerts_.size() > 5)
+        alerts_.erase(alerts_.begin());
+}
+
+void Dashboard::render() {
+    clear();  // wipe the screen
+
+    int row = 0;
+
+    // ── Title ──
+    attron(COLOR_PAIR(3) | A_BOLD);
+    mvprintw(row++, 0,
+        
+");
+    mvprintw(row++, 0,
+        "║    Network Threat Engine — Live View   ║");
+    mvprintw(row++, 0,
+        "╠════════════════════════════════════════╣");
+    attroff(COLOR_PAIR(3) | A_BOLD);
+
+    // ── Stats ──
+    attron(COLOR_PAIR(1));
+    mvprintw(row++, 0,
+        "║  Packets captured : %-18lu  ║",
+        packetCount_);
+    mvprintw(row++, 0,
+        "║  Active flows     : %-18lu  ║",
+        flowCount_);
+    mvprintw(row++, 0,
+        "║  Alerts fired     : %-18zu  ║",
+        alerts_.size());
+    attroff(COLOR_PAIR(1));
+
+    // ── Alerts section ──
+    attron(COLOR_PAIR(3) | A_BOLD);
+    mvprintw(row++, 0,
+        "╠════════════════════════════════════════╣");
+    mvprintw(row++, 0,
+        "║  RECENT ALERTS                         ║");
+    mvprintw(row++, 0,
+        "╠════════════════════════════════════════╣");
+    attroff(COLOR_PAIR(3) | A_BOLD);
+
+    // print each alert in red
+    if (alerts_.empty()) {
+        attron(COLOR_PAIR(1));
+        mvprintw(row++, 0,
+            "║  No alerts yet...                      ║");
+        attroff(COLOR_PAIR(1));
+    } else {
+        for (const auto& alert : alerts_) {
+            attron(COLOR_PAIR(2) | A_BOLD);
+            mvprintw(row++, 0,
+                "║  [%s] %-8s from %-14s  ║",
+                alert.time.c_str(),
+                alert.type.c_str(),
+                alert.ip.c_str());
+            attroff(COLOR_PAIR(2) | A_BOLD);
+        }
+    }
+
+    // ── Footer ──
+    attron(COLOR_PAIR(3) | A_BOLD);
+    mvprintw(row++, 0,
+        "╚════════════════════════════════════════╝");
+    mvprintw(row++, 0,
+        "  Press Ctrl+C to stop");
+    attroff(COLOR_PAIR(3) | A_BOLD);
+
+    refresh();  // actually draw everything to screen
+}
